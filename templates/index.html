@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gemini Chatbot</title>
+    <style>
+        body { font-family: sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; background-color: #f0f2f5; }
+        .chat-container { width: 400px; height: 600px; display: flex; flex-direction: column; background: white; border-radius: 10px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1); overflow: hidden; }
+        .chat-box { flex-grow: 1; padding: 15px; overflow-y: auto; border-bottom: 1px solid #eee; }
+        .message { margin-bottom: 10px; padding: 8px 12px; border-radius: 15px; max-width: 80%; }
+        .user-message { background-color: #007bff; color: white; margin-left: auto; text-align: right; border-bottom-right-radius: 0; }
+        .bot-message { background-color: #e9ecef; color: #333; margin-right: auto; text-align: left; border-bottom-left-radius: 0; }
+        .input-area { display: flex; padding: 10px; border-top: 1px solid #eee; }
+        .input-area input { flex-grow: 1; padding: 10px; border: 1px solid #ccc; border-radius: 20px; margin-right: 10px; }
+        .input-area button { background-color: #28a745; color: white; border: none; border-radius: 20px; padding: 10px 15px; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <div class="chat-container">
+        <div class="chat-box" id="chat-box">
+            <div class="message bot-message">Hello! I'm a chatbot powered by Gemini. Ask me anything.</div>
+        </div>
+        <div class="input-area">
+            <input type="text" id="user-input" placeholder="Type your message..." autofocus>
+            <button onclick="sendMessage()">Send</button>
+        </div>
+    </div>
+
+    <script>
+        const chatBox = document.getElementById('chat-box');
+        const userInput = document.getElementById('user-input');
+
+        // Function to create and append a message element
+        function appendMessage(text, sender) {
+            const messageDiv = document.createElement('div');
+            messageDiv.classList.add('message');
+            messageDiv.classList.add(sender === 'user' ? 'user-message' : 'bot-message');
+            messageDiv.innerHTML = text; // Use innerHTML for simple markdown/formatting later
+            chatBox.appendChild(messageDiv);
+            // Auto-scroll to the bottom
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+
+        async function sendMessage() {
+            const message = userInput.value.trim();
+            if (message === '') return;
+
+            // 1. Display user message
+            appendMessage(message, 'user');
+            userInput.value = ''; // Clear input
+
+            // Add a temporary loading message for the bot
+            const loadingMessage = document.createElement('div');
+            loadingMessage.classList.add('message', 'bot-message');
+            loadingMessage.id = 'loading-message';
+            loadingMessage.innerHTML = 'Thinking...';
+            chatBox.appendChild(loadingMessage);
+            chatBox.scrollTop = chatBox.scrollHeight;
+
+            try {
+                // 2. Send the message to the Flask backend
+                const response = await fetch('/chat', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ message: message })
+                });
+
+                const data = await response.json();
+
+                // 3. Remove loading message
+                loadingMessage.remove();
+
+                if (response.ok) {
+                    // 4. Display bot response
+                    appendMessage(data.response, 'bot');
+                } else {
+                    // Handle server-side errors
+                    appendMessage(`Error: ${data.error || 'Could not get response from server.'}`, 'bot');
+                }
+            } catch (error) {
+                console.error('Fetch error:', error);
+                // 3. Remove loading message
+                loadingMessage.remove();
+                appendMessage('Network or unexpected error. Please try again.', 'bot');
+            }
+        }
+
+        // Allow sending message with the Enter key
+        userInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault(); // Prevents a newline in the input field
+                sendMessage();
+            }
+        });
+    </script>
+</body>
+</html>
