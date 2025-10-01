@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gemini Full-Stack Chatbot</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            /* Dark background for modern look */
+            background-color: #1f2937; /* Gray-800 */
+        }
+        /* Custom scrollbar for chat history */
+        #chat-history::-webkit-scrollbar {
+            width: 8px;
+        }
+        #chat-history::-webkit-scrollbar-thumb {
+            background-color: #4b5563; /* Gray-600 */
+            border-radius: 4px;
+        }
+        #chat-history::-webkit-scrollbar-track {
+            background-color: #1f2937;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex items-center justify-center p-4">
+
+    <!-- Main Chat Container -->
+    <div class="w-full h-[90vh] md:h-[80vh] max-w-3xl flex flex-col bg-gray-900 shadow-2xl rounded-xl overflow-hidden">
+        
+        <!-- Header -->
+        <header class="p-4 bg-gray-800 text-white shadow-md flex items-center justify-between">
+            <div class="flex items-center">
+                <i class="fas fa-robot text-teal-400 text-2xl mr-3"></i>
+                <h1 class="text-xl font-bold">Gemini Dev Assistant</h1>
+            </div>
+            <span id="status-indicator" class="text-sm font-semibold text-gray-400">Initializing...</span>
+        </header>
+
+        <!-- Chat History Area -->
+        <main id="chat-history" class="flex-grow overflow-y-auto p-6 space-y-6">
+            <div class="flex justify-start">
+                <div class="bg-teal-500/10 text-teal-200 p-4 rounded-b-xl rounded-tr-xl shadow-lg max-w-xs md:max-w-md">
+                    <p class="font-semibold mb-1">Welcome!</p>
+                    <p>I'm your AI developer assistant, ready to help with code, concepts, and real-time facts. Ask me anything!</p>
+                </div>
+            </div>
+        </main>
+        
+        <!-- Input Area (Fixed at Bottom) -->
+        <div class="p-4 bg-gray-800 border-t border-gray-700">
+            <div id="error-message" class="text-red-400 mb-2 hidden text-sm font-medium"></div>
+            <form id="chat-form" class="flex items-end space-x-3">
+                <textarea 
+                    id="user-input" 
+                    rows="1" 
+                    placeholder="Ask Gemini a question..." 
+                    class="flex-grow resize-none p-3 border border-gray-600 bg-gray-700 text-white rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition duration-150 overflow-hidden"
+                    oninput="this.style.height='auto'; this.style.height=(this.scrollHeight)+'px'"
+                    required
+                ></textarea>
+                <button 
+                    type="submit" 
+                    id="send-button" 
+                    class="flex-shrink-0 bg-teal-600 hover:bg-teal-700 text-white font-bold p-3 rounded-full transition duration-300 shadow-md disabled:bg-gray-500 disabled:cursor-not-allowed"
+                >
+                    <i class="fas fa-paper-plane"></i>
+                </button>
+            </form>
+            <div id="loading-indicator" class="hidden mt-2 text-teal-400 text-sm font-medium">
+                <i class="fas fa-spinner fa-spin mr-2"></i> Thinking...
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- Configuration & Initialization ---
+
+        // CRITICAL: If you are running this code outside of a supported environment 
+        // (i.e., you get an "API key not valid" error), you must insert your key below.
+        // For secure environments (like Canvas), this remains an empty string and the key is injected at runtime.
+        const apiKey = "AIzaSyCGSntakuVeCDSf_uCjBRCUzuBK1AYwvqQ"; 
+
+        const API_URL_BASE = 'https://generativelanguage.googleapis.com/v1beta/models/';
+        const MODEL = 'gemini-2.5-flash-preview-05-20';
+        // The API URL is constructed dynamically below in the main logic.
+
+        // DOM elements
+        const chatHistory = document.getElementById('chat-history');
+        const chatForm = document.getElementById('chat-form');
+        const userInput = document.getElementById('user-input');
+        const sendButton = document.getElementById('send-button');
+        const loadingIndicator = document.getElementById('loading-indicator');
+        const statusIndicator = document.getElementById('status-indicator');
+        const errorMessage = document.getElementById('error-message');
+
+        // Initial setup check
+        function initializeChatbot() {
+            if (!apiKey || apiKey.trim() === "") {
+                statusIndicator.textContent = 'ERROR: Missing API Key';
+                statusIndicator.classList.remove('text-gray-400', 'text-teal-400');
+                statusIndicator.classList.add('text-red-500');
+                sendButton.disabled = true;
+                userInput.placeholder = "API Key missing. Cannot send messages.";
+                userInput.disabled = true;
+
+                createMessageElement(
+                    "**CRITICAL ERROR:** The Gemini API Key is missing. If you are running this locally, please insert your key into the `const apiKey` variable in the script block for the app to function.", 
+                    'model'
+                );
+                return false;
+            }
+            statusIndicator.textContent = 'Ready';
+            statusIndicator.classList.remove('text-red-500');
+            statusIndicator.classList.add('text-teal-400');
+            return true;
+        }
+
+
+        /**
+         * Creates and appends a message bubble to the chat history.
+         * @param {string} text - The message content.
+         * @param {string} role - 'user' or 'model'.
+         * @param {Array<Object>} sources - Optional array of grounding sources.
+         */
+        function createMessageElement(text, role, sources = []) {
+            const container = document.createElement('div');
+            container.className = `flex ${role === 'user' ? 'justify-end' : 'justify-start'}`;
+
+            const bubbleClass = role === 'user' 
+                ? 'bg-teal-600 text-white rounded-tl-xl rounded-b-xl' 
+                : 'bg-gray-700 text-gray-100 rounded-tr-xl rounded-b-xl';
+
+            const messageBubble = document.createElement('div');
+            messageBubble.className = `${bubbleClass} p-4 shadow-lg max-w-xs md:max-w-md break-words`;
+            
+            // Convert potential markdown to basic HTML for better readability
+            const formattedText = text
+                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') // bold
+                .replace(/\n/g, '<br>'); // newlines
+
+            messageBubble.innerHTML = formattedText;
+            
+            // Add sources if available
+            if (sources.length > 0) {
+                const sourceContainer = document.createElement('div');
+                sourceContainer.className = 'mt-3 pt-3 border-t border-gray-600 text-xs text-gray-400 italic';
+                
+                let sourceHTML = 'Sources: ';
+                sources.forEach((source, index) => {
+                    if (source.uri && source.title) {
+                        sourceHTML += `<a href="${source.uri}" target="_blank" class="text-teal-400 hover:underline">${source.title}</a>${index < sources.length - 1 ? ', ' : ''}`;
+                    }
+                });
+
+                sourceContainer.innerHTML = sourceHTML;
+                messageBubble.appendChild(sourceContainer);
+            }
+
+            chatHistory.appendChild(container);
+            chatHistory.scrollTop = chatHistory.scrollHeight; // Scroll to bottom
+        }
+
+        /**
+         * Implements exponential backoff retry logic for fetch requests.
+         * @param {string} url - The API endpoint URL.
+         * @param {object} options - Fetch request options.
+         * @param {number} maxRetries - Maximum number of retries.
+         */
+        async function retryFetch(url, options, maxRetries = 5) {
+            for (let i = 0; i < maxRetries; i++) {
+                try {
+                    const response = await fetch(url, options);
+                    if (response.status === 429) { // Too Many Requests
+                        throw new Error('API limit exceeded. Retrying...');
+                    }
+                    if (!response.ok) {
+                        const errorBody = await response.json().catch(() => ({}));
+                        throw new Error(errorBody.error?.message || `HTTP error! Status: ${response.status}`);
+                    }
+                    return response;
+                } catch (error) {
+                    if (i < maxRetries - 1 && error.message.includes('Retrying')) {
+                        const delay = Math.pow(2, i) * 1000;
+                        await new Promise(resolve => setTimeout(resolve, delay));
+                        continue;
+                    }
+                    throw error;
+                }
+            }
+            throw new Error(`Failed to fetch content after ${maxRetries} attempts.`);
+        }
+
+        /**
+         * Calls the Gemini API with the user's query.
+         */
+        async function callGeminiAPI(userQuery) {
+            const API_URL = `${API_URL_BASE}${MODEL}:generateContent?key=${apiKey}`;
+
+            const payload = {
+                contents: [{ parts: [{ text: userQuery }] }],
+                // Enable Google Search grounding for real-time data
+                tools: [{ "google_search": {} }], 
+                systemInstruction: {
+                    parts: [{ text: "You are a highly helpful and friendly full-stack developer assistant. Provide concise, professional, and well-structured answers. Always use real-time data when necessary by utilizing the search tool." }],
+                },
+            };
+
+            const options = {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            };
+
+            const response = await retryFetch(API_URL, options);
+            const result = await response.json();
+            const candidate = result.candidates?.[0];
+
+            if (!candidate || !candidate.content?.parts?.[0]?.text) {
+                // If the response is OK but contains no text, it might be due to safety filters.
+                throw new Error("The API responded successfully but returned no text. This may be due to safety filters or an empty response.");
+            }
+
+            const text = candidate.content.parts[0].text;
+            let sources = [];
+            
+            // Extract grounding sources
+            const groundingMetadata = candidate.groundingMetadata;
+            if (groundingMetadata && groundingMetadata.groundingAttributions) {
+                sources = groundingMetadata.groundingAttributions
+                    .map(attribution => ({
+                        uri: attribution.web?.uri,
+                        title: attribution.web?.title,
+                    }))
+                    .filter(source => source.uri && source.title);
+            }
+
+            return { text, sources };
+        }
+
+        /**
+         * Main function to handle the chat interaction.
+         */
+        async function sendMessage(event) {
+            event.preventDefault();
+            errorMessage.classList.add('hidden');
+            
+            // Prevent sending if initialization failed (missing key)
+            if (!initializeChatbot()) return;
+
+            const query = userInput.value.trim();
+            if (!query) return;
+
+            // 1. Disable input and show loading
+            userInput.value = '';
+            userInput.style.height = 'auto'; // Reset height
+            sendButton.disabled = true;
+            loadingIndicator.classList.remove('hidden');
+            statusIndicator.textContent = 'Thinking...';
+
+            // 2. Append User Message
+            createMessageElement(query, 'user');
+
+            try {
+                // 3. Call API
+                const { text, sources } = await callGeminiAPI(query);
+                
+                // 4. Append AI Response
+                createMessageElement(text, 'model', sources);
+
+            } catch (error) {
+                console.error("Gemini API Error:", error);
+                
+                // 5. Display detailed error to user
+                const userFriendlyError = error.message.includes('HTTP error! Status: 400') && !apiKey 
+                    ? `Authentication Failed: The API key is missing or invalid. Please check the 'const apiKey' variable in the script.`
+                    : `Request failed. Error: "${error.message}"`;
+
+                createMessageElement(`🤖 **Error:** ${userFriendlyError}`, 'model');
+                errorMessage.textContent = 'A critical API error occurred. See chat history for details.';
+                errorMessage.classList.remove('hidden');
+
+            } finally {
+                // 6. Re-enable input and hide loading
+                sendButton.disabled = false;
+                loadingIndicator.classList.add('hidden');
+                statusIndicator.textContent = 'Ready';
+                userInput.focus();
+            }
+        }
+
+        // --- Event Listeners and Initial Run ---
+        
+        window.onload = initializeChatbot; // Check key on load
+
+        // Attach submit handler to the form
+        chatForm.addEventListener('submit', sendMessage);
+
+        // Allow sending message with Enter (without Shift)
+        userInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                chatForm.dispatchEvent(new Event('submit'));
+            }
+        });
+        
+        // Auto-resize textarea
+        userInput.addEventListener('input', function() {
+            this.style.height = 'auto';
+            this.style.height = (this.scrollHeight) + 'px';
+        });
+
+    </script>
+</body>
+</html>
