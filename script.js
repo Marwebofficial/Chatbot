@@ -1,3 +1,4 @@
+import { GoogleGenAI } from "@google/genai";
 const API_KEY = 'AIzaSyBQKDjIPLH1QKCsrLdMio8vSppPNmJfcWM'; 
 // Replace with your actual Gemini API key – this stores the API key to authenticate requests to the Gemini API.
 
