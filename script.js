@@ -1,7 +1,7 @@
 const API_KEY = 'AIzaSyBQKDjIPLH1QKCsrLdMio8vSppPNmJfcWM'; 
 // Replace with your actual Gemini API key – this stores the API key to authenticate requests to the Gemini API.
 
-const API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent';
+const API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-latest:generateContent';
 // The base URL of the Gemini API used to generate content (for text-based responses).
 
 const chatMessages = document.getElementById('chat-messages');
