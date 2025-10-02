@@ -47,7 +47,7 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   async function getBotResponse(userMessage) {
-    const apiKey = "your-api-key"; // Replace with your OpenAI API key
+    const apiKey = "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"; // Replace with your OpenAI API key
     const apiUrl = "https://api.openai.com/v1/chat/completions";
 
     try {
